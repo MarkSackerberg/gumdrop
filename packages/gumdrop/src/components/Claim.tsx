@@ -62,6 +62,7 @@ import {
 } from '../utils/accounts';
 import { MerkleTree } from '../utils/merkleTree';
 import { explorerLinkFor, sendSignedTransaction } from '../utils/transactions';
+import { ClaimStatus } from '../utils/ClaimStatus';
 
 export const chunk = (arr: Buffer, len: number): Array<Buffer> => {
   const chunks: Array<Buffer> = [];
@@ -657,6 +658,53 @@ const fetchNeedsTemporalSigner = async (
   }
 };
 
+const fetchProof = async (wallet: PublicKey, distributorStr: string) => {
+  if (!wallet) {
+    return;
+  }
+  const connection = useConnection();
+  const response = await fetch(
+    `https://gumdrop-jsons.s3.amazonaws.com/${distributorStr}-${wallet.toBase58()}.json`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+  const claims = await response.json();
+
+  for (let i = 0; i < claims.length; i++) {
+    const [claimStatus, cbump] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from('ClaimStatus'),
+        Buffer.from(new BN(claims[i].index).toArray('le', 8)),
+        new PublicKey(claims[i].distributor).toBuffer(),
+      ],
+      GUMDROP_DISTRIBUTOR_ID,
+    );
+    if (
+      (await connection.getAccountInfo(claimStatus)) === null ||
+      i == claims.length - 1
+    ) {
+      return claims[i];
+    }
+  }
+
+  //TODO: get JSON
+  //TODO: for each claim
+  // const [claimStatus, cbump] = await PublicKey.findProgramAddress(
+  //   [
+  //     Buffer.from('ClaimStatus'),
+  //     Buffer.from(new BN(index).toArray('le', 8)),
+  //     distributorKey.toBuffer(),
+  //   ],
+  //   GUMDROP_DISTRIBUTOR_ID,
+  // );
+  //TODO:
+  //await ClaimStatus.fromAccountAddress(connection, claimStatus)
+};
+
 export type ClaimProps = {};
 
 type ClaimTransactions = {
@@ -668,6 +716,7 @@ type Programs = {
   gumdrop: anchor.Program;
   candyMachine: anchor.Program;
 };
+let lastWallet : PublicKey;
 
 export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   const connection = useConnection();
@@ -713,12 +762,12 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   }, [wallet]);
 
   let query = props.location.search;
-  if (query && query.length > 0) {
-    localStorage.setItem('claimQuery', query);
-  } else {
-    const stored = localStorage.getItem('claimQuery');
-    if (stored) query = stored;
-  }
+  // if (query && query.length > 0) {
+  //   localStorage.setItem('claimQuery', query);
+  // } else {
+  //   const stored = localStorage.getItem('claimQuery');
+  //   if (stored) query = stored;
+  // }
 
   const params = queryString.parse(query);
   const [distributor, setDistributor] = React.useState(
@@ -755,6 +804,57 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   const [commMethod, setCommMethod] = React.useState(
     params.method || 'aws-email',
   );
+
+  if (
+    typeof params.distributor === 'string' &&
+    typeof params.index == 'undefined'
+  ) {
+    if (!wallet || lastWallet == wallet.publicKey) {
+      console.log('wait for wallet connection');
+    } else {
+      lastWallet == wallet.publicKey
+      const claimData = fetchProof(wallet.publicKey, params.distributor);
+      new Promise<{
+        distributor: string;
+        handle: string;
+        amount: string;
+        index: string;
+        proof: string;
+        pin: string;
+        candy: string;
+        tokenAcc: string;
+        master: string;
+        edition: string;
+      }>(resolve => {
+        resolve(claimData);
+      }).then(r => {
+        setDistributor(r.distributor);
+        setHandle(r.handle);
+        setAmount(r.amount);
+        setIndex(r.index);
+        setProof(r.proof);
+        setPin(r.pin);
+        console.log(r.candy)
+        setClaimMethod(
+          r.candy
+            ? 'candy'
+            : r.tokenAcc
+            ? 'transfer'
+            : r.master
+            ? 'edition'
+            : '',
+        );
+        setCandyMachine((r.candy || ''))
+        setMasterMint((r.master || ''))
+        setEditionStr((r.edition || ''))
+        setTokenAcc(r.tokenAcc || '');
+        setWhitelisted(true);
+      })
+      .catch(r => {
+        setWhitelisted(false);
+      })
+    }
+  }
 
   const allFieldsPopulated =
     distributor.length > 0 &&
@@ -822,7 +922,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     if (isNaN(index)) {
       throw new Error(`Could not parse index ${indexStr}`);
     }
-    if (params.pin !== 'NA') {
+    if (pinStr !== 'NA') {
       try {
         pin = new BN(pinStr);
       } catch (err) {
@@ -1165,6 +1265,8 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     />
   );
 
+  const [whitelisted, setWhitelisted] = React.useState(false);
+
   const verifyOTPC = onClick => (
     <React.Fragment>
       <TextField
@@ -1177,7 +1279,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
 
       <Box sx={{ position: 'relative' }}>
         <Button
-          disabled={!wallet || !program || !OTPStr || loading}
+          disabled={!wallet || !program || !OTPStr || loading || !whitelisted}
           variant="contained"
           color="secondary"
           style={{ width: '100%' }}
