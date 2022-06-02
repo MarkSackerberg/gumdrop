@@ -62,7 +62,6 @@ import {
 } from '../utils/accounts';
 import { MerkleTree } from '../utils/merkleTree';
 import { explorerLinkFor, sendSignedTransaction } from '../utils/transactions';
-import { ClaimStatus } from '../utils/ClaimStatus';
 
 export const chunk = (arr: Buffer, len: number): Array<Buffer> => {
   const chunks: Array<Buffer> = [];
