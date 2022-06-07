@@ -268,18 +268,7 @@ export const AppBar = () => {
                 showAddress={true}
                 iconSize={24}
               />
-              <div className="wallet-wrapper">
-                <Button className="wallet-key">
-                  <Link to="/">{homeSvg(location.pathname === '/')}</Link>
-                </Button>
-              </div>
-              <div className="wallet-wrapper">
-                <Button className="wallet-key">
-                  <Link to="/claim">
-                    {gumballsSvg(location.pathname === '/claim')}
-                  </Link>
-                </Button>
-              </div>
+
               <Cog />
             </>
           )}
