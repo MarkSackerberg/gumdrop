@@ -35,8 +35,8 @@ export const App = () => {
                 <WalletProvider>
                   <AppLayout>
                     <Switch>
-                      <Route exact path="/" component={About} />
-                      <Route exact path="/claim" component={Claim} />
+                      <Route exact path="/" component={Claim} />
+                      {/* <Route exact path="/claim" component={Claim} /> */}
                     </Switch>
                   </AppLayout>
                 </WalletProvider>
