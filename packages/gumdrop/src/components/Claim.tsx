@@ -16,6 +16,8 @@ import {
   StepLabel,
   Stepper,
   TextField,
+  Grid,
+  Typography,
 } from '@mui/material';
 
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
@@ -31,6 +33,7 @@ import {
   SYSVAR_RENT_PUBKEY,
   Transaction,
   TransactionInstruction,
+  LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
   AccountLayout,
@@ -62,6 +65,8 @@ import {
 } from '../utils/accounts';
 import { MerkleTree } from '../utils/merkleTree';
 import { explorerLinkFor, sendSignedTransaction } from '../utils/transactions';
+import { useNativeAccount } from '../contexts/accounts';
+import proofs from '../../proofs.json';
 
 export const chunk = (arr: Buffer, len: number): Array<Buffer> => {
   const chunks: Array<Buffer> = [];
@@ -657,21 +662,12 @@ const fetchNeedsTemporalSigner = async (
   }
 };
 
-const fetchProof = async (wallet: PublicKey, distributorStr: string) => {
+const fetchProof = async (wallet: PublicKey) => {
   if (!wallet) {
     return;
   }
   const connection = useConnection();
-  const response = await fetch(
-    `https://gumdrop-jsons.s3.amazonaws.com/${distributorStr}-${wallet.toBase58()}.json`,
-    {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    },
-  );
-  const claims = await response.json();
+  const claims = await proofs[wallet.toBase58()];
 
   for (let i = 0; i < claims.length; i++) {
     const [claimStatus, cbump] = await PublicKey.findProgramAddress(
@@ -715,7 +711,7 @@ type Programs = {
   gumdrop: anchor.Program;
   candyMachine: anchor.Program;
 };
-let lastWallet : PublicKey;
+let lastWallet: PublicKey;
 
 export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   const connection = useConnection();
@@ -805,14 +801,14 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   );
 
   if (
-    typeof params.distributor === 'string' &&
+    //typeof params.distributor === 'string' &&
     typeof params.index == 'undefined'
   ) {
     if (!wallet || lastWallet == wallet.publicKey) {
       console.log('wait for wallet connection');
     } else {
-      lastWallet == wallet.publicKey
-      const claimData = fetchProof(wallet.publicKey, params.distributor);
+      lastWallet == wallet.publicKey;
+      const claimData = fetchProof(wallet.publicKey);
       new Promise<{
         distributor: string;
         handle: string;
@@ -826,32 +822,33 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
         edition: string;
       }>(resolve => {
         resolve(claimData);
-      }).then(r => {
-        setDistributor(r.distributor);
-        setHandle(r.handle);
-        setAmount(r.amount);
-        setIndex(r.index);
-        setProof(r.proof);
-        setPin(r.pin);
-        console.log(r.candy)
-        setClaimMethod(
-          r.candy
-            ? 'candy'
-            : r.tokenAcc
-            ? 'transfer'
-            : r.master
-            ? 'edition'
-            : '',
-        );
-        setCandyMachine((r.candy || ''))
-        setMasterMint((r.master || ''))
-        setEditionStr((r.edition || ''))
-        setTokenAcc(r.tokenAcc || '');
-        setWhitelisted(true);
       })
-      .catch(r => {
-        setWhitelisted(false);
-      })
+        .then(r => {
+          setDistributor(r.distributor);
+          setHandle(r.handle);
+          setAmount(r.amount);
+          setIndex(r.index);
+          setProof(r.proof);
+          setPin(r.pin);
+          console.log(r.candy);
+          setClaimMethod(
+            r.candy
+              ? 'candy'
+              : r.tokenAcc
+              ? 'transfer'
+              : r.master
+              ? 'edition'
+              : '',
+          );
+          setCandyMachine(r.candy || '');
+          setMasterMint(r.master || '');
+          setEditionStr(r.edition || '');
+          setTokenAcc(r.tokenAcc || '');
+          setWhitelisted(true);
+        })
+        .catch(r => {
+          setWhitelisted(false);
+        });
     }
   }
 
@@ -1310,24 +1307,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
 
   const claimData = claimMethod => {
     if (claimMethod === 'candy') {
-      return (
-        <React.Fragment>
-          <TextField
-            id="token-acc-text-field"
-            label="Whitelist Token Account"
-            value={tokenAcc}
-            onChange={e => setTokenAcc(e.target.value)}
-            disabled={!editable}
-          />
-          <TextField
-            id="candy-text-field"
-            label="Candy Machine"
-            value={candyMachine}
-            onChange={e => setCandyMachine(e.target.value)}
-            disabled={!editable}
-          />
-        </React.Fragment>
-      );
+      return <React.Fragment></React.Fragment>;
     } else if (claimMethod === 'transfer') {
       return (
         <React.Fragment>
@@ -1362,119 +1342,43 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     }
   };
 
+
+  const { account } = useNativeAccount();
+  const balance = (account?.lamports || 0) / LAMPORTS_PER_SOL;
+
   const populateClaimC = onClick => (
     <React.Fragment>
-      <Box />
-      <FormControl fullWidth>
-        <InputLabel id="claim-method-label" disabled={!editable}>
-          Gumdrop Type
-        </InputLabel>
-        <Select
-          labelId="claim-method-label"
-          id="claim-method-select"
-          value={claimMethod}
-          label="Claim Method"
-          onChange={e => {
-            setClaimMethod(e.target.value);
-          }}
-          style={{ textAlign: 'left' }}
-          disabled={!editable}
-        >
-          <MenuItem value={'transfer'}>Token Transfer</MenuItem>
-          <MenuItem value={'candy'}>Candy Machine</MenuItem>
-          <MenuItem value={'edition'}>Limited Edition</MenuItem>
-        </Select>
-      </FormControl>
-      <TextField
-        id="distributor-text-field"
-        label="Gumdrop Address"
-        value={distributor}
-        onChange={e => setDistributor(e.target.value)}
-        disabled={!editable}
-      />
-      <TextField
-        id="handle-text-field"
-        label="Handle"
-        value={handle}
-        onChange={e => setHandle(e.target.value)}
-        disabled={!editable}
-      />
-      {claimMethod !== 'edition' && (
-        <TextField
-          id="amount-text-field"
-          label="Amount"
-          value={amountStr}
-          onChange={e => setAmount(e.target.value)}
-          disabled={!editable}
-        />
-      )}
+      <Grid container direction="row" justifyContent="center" wrap="nowrap">
+        <Grid item xs={3}>
+          <Typography variant="body2" color="textSecondary">
+            Wallet Balance
+          </Typography>
+          <Typography
+            variant="h6"
+            color="textPrimary"
+            style={{
+              fontWeight: 'bold',
+            }}
+          >
+            {`◎ ${balance}`}
+          </Typography>
+        </Grid>
+        <Grid item xs={3}>
+          <Typography variant="body2" color="textSecondary">
+            Price
+          </Typography>
+          <Typography
+            variant="h6"
+            color="textPrimary"
+            style={{
+              fontWeight: 'bold',
+            }}
+          >
+            {`◎ 3`}
+          </Typography>
+        </Grid>
+      </Grid>
       {claimMethod !== '' && claimData(claimMethod)}
-
-      <CollapsePanel
-        id="additional-parameters"
-        panelName="Additional Parameters"
-      >
-        <Stack spacing={2}>
-          <FormControl fullWidth>
-            <InputLabel id="comm-method-label" disabled={!editable}>
-              Distribution Method
-            </InputLabel>
-            <Select
-              labelId="comm-method-label"
-              id="comm-method-select"
-              value={commMethod}
-              label="Distribution Method"
-              onChange={e => {
-                if (e.target.value === 'discord') {
-                  notify({
-                    message: 'Discord distribution unavailable',
-                    description:
-                      'Please use the CLI for this. Discord does not support browser-connection requests',
-                  });
-                  return;
-                }
-                localStorage.setItem('commMethod', e.target.value as string);
-                setCommMethod(e.target.value);
-              }}
-              style={{ textAlign: 'left' }}
-              disabled={!editable}
-            >
-              <MenuItem value={'aws-email'}>AWS Email</MenuItem>
-              <MenuItem value={'aws-sms'}>AWS SMS</MenuItem>
-              <MenuItem value={'discord'}>Discord</MenuItem>
-              <MenuItem value={'wallets'}>Wallets</MenuItem>
-              <MenuItem value={'manual'}>Manual</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            id="index-text-field"
-            label="Index"
-            value={indexStr}
-            onChange={e => setIndex(e.target.value)}
-            disabled={!editable}
-          />
-          {params.pin !== 'NA' && (
-            <TextField
-              id="pin-text-field"
-              label="Pin"
-              value={pinStr}
-              onChange={e => setPin(e.target.value)}
-              disabled={!editable}
-            />
-          )}
-          <TextField
-            id="proof-text-field"
-            label="Proof"
-            multiline
-            value={proofStr}
-            onChange={e => setProof(e.target.value)}
-            disabled={!editable}
-          />
-          <Button onClick={() => setEditable(!editable)}>
-            {!editable ? 'Edit Claim' : 'Stop Editing'}
-          </Button>
-        </Stack>
-      </CollapsePanel>
 
       <Box />
 
@@ -1526,9 +1430,11 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     </React.Fragment>
   );
 
-  const steps = [{ name: 'Populate Claim', inner: populateClaimC }];
+  const steps = [
+    { name: 'Please connect a whitelisted wallet!', inner: populateClaimC },
+  ];
   if (asyncNeedsTemporalSigner) {
-    steps.push({ name: 'Verify OTP', inner: verifyOTPC });
+    steps.push({ name: 'Mint!', inner: verifyOTPC });
   }
 
   // TODO: better interaction between setting `asyncNeedsTemporalSigner` and
