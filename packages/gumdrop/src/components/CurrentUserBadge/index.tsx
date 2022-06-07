@@ -260,7 +260,7 @@ export const Cog = () => {
               width: 250,
             }}
           >
-            <h5
+            {/* <h5
               style={{
                 color: 'rgba(255, 255, 255, 0.7)',
                 letterSpacing: '0.02em',
@@ -296,7 +296,7 @@ export const Cog = () => {
                   {name}
                 </Select.Option>
               ))}
-            </Select>
+            </Select> */}
 
             <Button
               className="metaplex-button-default"
