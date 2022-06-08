@@ -23,6 +23,9 @@ export const App = () => {
       secondary: {
         main: '#8458B3',
       },
+      error: {
+        main: '#c62828'
+      }
     },
   });
   return (
