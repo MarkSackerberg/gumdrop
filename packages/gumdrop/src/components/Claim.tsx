@@ -6,11 +6,7 @@ import {
   Box,
   Button,
   CircularProgress,
-  FormControl,
   Link as HyperLink,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   Step,
   StepLabel,
@@ -47,7 +43,6 @@ import * as bs58 from 'bs58';
 import * as anchor from '@project-serum/anchor';
 
 import { useWindowDimensions } from './AppBar';
-import { CollapsePanel } from './CollapsePanel';
 import { useConnection } from '../contexts/ConnectionContext';
 import {
   CANDY_MACHINE_ID,
@@ -664,11 +659,10 @@ const fetchNeedsTemporalSigner = async (
   }
 };
 
-const fetchProof = async (wallet: PublicKey) => {
+const fetchProof = async (connection: RPCConnection, wallet: PublicKey) => {
   if (!wallet) {
     return;
   }
-  const connection = useConnection();
   const claims = await proofs[wallet.toBase58()];
   const candyMachine = await getCandyMachine(connection, new PublicKey(claims[0].candy));
   const mint = new PublicKey(
@@ -767,7 +761,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     wrap();
   }, [wallet]);
 
-  let query = props.location.search;
+  const query = props.location.search;
   // if (query && query.length > 0) {
   //   localStorage.setItem('claimQuery', query);
   // } else {
@@ -819,7 +813,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
       console.log('wait for wallet connection');
     } else {
       lastWallet == wallet.publicKey;
-      const claimData = fetchProof(wallet.publicKey);
+      const claimData = fetchProof(connection, wallet.publicKey);
       new Promise<{
         distributor: string;
         handle: string;

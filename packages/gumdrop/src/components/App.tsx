@@ -10,7 +10,6 @@ import { SPLTokenListProvider } from '../contexts/tokenList';
 import { WalletProvider } from '../contexts/WalletContext';
 import { AppLayout } from './Layout';
 
-import { About } from './About';
 import { Claim } from './Claim';
 
 export const App = () => {
