@@ -68,6 +68,8 @@ import { explorerLinkFor, sendSignedTransaction } from '../utils/transactions';
 import { useNativeAccount } from '../contexts/accounts';
 import proofs from '../../proofs.json';
 
+const mintPrice: number = 1;
+
 export const chunk = (arr: Buffer, len: number): Array<Buffer> => {
   const chunks: Array<Buffer> = [];
   const n = arr.length;
@@ -668,6 +670,14 @@ const fetchProof = async (wallet: PublicKey) => {
   }
   const connection = useConnection();
   const claims = await proofs[wallet.toBase58()];
+  const candyMachine = await getCandyMachine(connection, new PublicKey(claims[0].candy));
+  const mint = new PublicKey(
+    candyMachine.data.whitelistMintSettings.mint,
+  );
+  const token = new PublicKey ( (await getATA(wallet, mint)));
+
+  const balance = await connection.getTokenAccountBalance(token);
+  const tokenAvailable = parseInt(balance.value.amount) > 0;
 
   for (let i = 0; i < claims.length; i++) {
     const [claimStatus, cbump] = await PublicKey.findProgramAddress(
@@ -678,10 +688,11 @@ const fetchProof = async (wallet: PublicKey) => {
       ],
       GUMDROP_DISTRIBUTOR_ID,
     );
-    if (
-      (await connection.getAccountInfo(claimStatus)) === null ||
-      i == claims.length - 1
-    ) {
+    if ((await connection.getAccountInfo(claimStatus)) === null) {
+      claims[i].canStillMint = true;
+      return claims[i];
+    } else if (!tokenAvailable && i == claims.length - 1) {
+      claims[i].canStillMint = false;
       return claims[i];
     }
   }
@@ -820,6 +831,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
         tokenAcc: string;
         master: string;
         edition: string;
+        canStillMint: boolean;
       }>(resolve => {
         resolve(claimData);
       })
@@ -830,7 +842,6 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
           setIndex(r.index);
           setProof(r.proof);
           setPin(r.pin);
-          console.log(r.candy);
           setClaimMethod(
             r.candy
               ? 'candy'
@@ -845,9 +856,11 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
           setEditionStr(r.edition || '');
           setTokenAcc(r.tokenAcc || '');
           setWhitelisted(true);
+          setCanStillMint(r.canStillMint);
         })
         .catch(r => {
           setWhitelisted(false);
+          console.log(r)
         });
     }
   }
@@ -1262,6 +1275,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
   );
 
   const [whitelisted, setWhitelisted] = React.useState(false);
+  const [canStillMint, setCanStillMint] = React.useState(false);
 
   const verifyOTPC = onClick => (
     <React.Fragment>
@@ -1342,7 +1356,6 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
     }
   };
 
-
   const { account } = useNativeAccount();
   const balance = (account?.lamports || 0) / LAMPORTS_PER_SOL;
 
@@ -1355,17 +1368,17 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
           </Typography>
           <Typography
             variant="h6"
-            color="textPrimary"
+            color={balance < mintPrice ? 'error' : 'textPrimary'}
             style={{
               fontWeight: 'bold',
             }}
           >
-            {`◎ ${balance}`}
+            {`◎ ${!wallet ? '?' : balance}`}
           </Typography>
         </Grid>
         <Grid item xs={3}>
           <Typography variant="body2" color="textSecondary">
-            Price
+            Mint Price
           </Typography>
           <Typography
             variant="h6"
@@ -1374,7 +1387,7 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
               fontWeight: 'bold',
             }}
           >
-            {`◎ 3`}
+            {`◎ ${mintPrice}`}
           </Typography>
         </Grid>
       </Grid>
@@ -1384,7 +1397,15 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
 
       <Box sx={{ position: 'relative' }}>
         <Button
-          disabled={!wallet || !program || !allFieldsPopulated || loading}
+          disabled={
+            !wallet ||
+            !program ||
+            !allFieldsPopulated ||
+            loading ||
+            balance < mintPrice ||
+            !whitelisted ||
+            !canStillMint
+          }
           variant="contained"
           style={{ width: '100%' }}
           color={asyncNeedsTemporalSigner ? 'primary' : 'secondary'}
@@ -1423,7 +1444,13 @@ export const Claim = (props: RouteComponentProps<ClaimProps>) => {
             wrap();
           }}
         >
-          {asyncNeedsTemporalSigner ? 'Next' : 'Claim Gumdrop'}
+          {!whitelisted
+            ? 'You are not whitelisted!'
+            : !canStillMint
+            ? 'You already minted all of your NFT allowance'
+            : balance < mintPrice
+            ? 'Not enough SOL'
+            : 'Mint now!'}
         </Button>
         {loading && loadingProgress()}
       </Box>
